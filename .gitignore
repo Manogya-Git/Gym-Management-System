@@ -1,0 +1,23 @@
+# Python virtual environment
+venv/
+.venv/
+env/
+
+# Python cache files
+__pycache__/
+*.py[cod]
+
+# Django environment variables
+.env
+
+# Database
+db.sqlite3
+
+# Node.js
+node_modules/
+
+# Build files
+dist/
+
+# IDE settings
+.vscode/
