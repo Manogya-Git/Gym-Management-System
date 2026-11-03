@@ -25,7 +25,6 @@ class Migration(migrations.Migration):
     ]
 
     operations = [
-        migrations.RunPython(migrate_status_values, reverse_status_values),
         migrations.AlterField(
             model_name='gym',
             name='owner',
@@ -41,4 +40,5 @@ class Migration(migrations.Migration):
             name='user',
             field=models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, related_name='gym_memberships', to=settings.AUTH_USER_MODEL),
         ),
+        migrations.RunPython(migrate_status_values, reverse_status_values),
     ]

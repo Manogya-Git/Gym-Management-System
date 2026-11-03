@@ -1,3 +1,4 @@
+from decouple import config
 import os
 import sys
 from pathlib import Path
@@ -10,9 +11,9 @@ BASE_DIR = Path(__file__).resolve().parent.parent.parent
 sys.path.insert(0, str(BASE_DIR / 'apps'))
 
 # Quick-start development settings - unsuitable for production
-SECRET_KEY = os.getenv('SECRET_KEY', 'django-insecure-vnqoe=3w#a8dao%%%e^ymeg#%$^cc74w8ik)8^0x8omusia0@v')
+SECRET_KEY = config("SECRET_KEY")
 
-DEBUG = False
+DEBUG = config("DEBUG", default=False, cast=bool)
 
 ALLOWED_HOSTS = []
 
@@ -83,12 +84,15 @@ ASGI_APPLICATION = 'config.asgi.application'
 
 # Database
 DATABASES = {
-    'default': {
-        'ENGINE': 'django.db.backends.sqlite3',
-        'NAME': BASE_DIR / 'db.sqlite3',
+    "default": {
+        "ENGINE": "django.db.backends.postgresql",
+        "NAME": config("DB_NAME"),
+        "USER": config("DB_USER"),
+        "PASSWORD": config("DB_PASSWORD"),
+        "HOST": config("DB_HOST", default="localhost"),
+        "PORT": config("DB_PORT", default="5432"),
     }
 }
-
 # Password validation
 AUTH_PASSWORD_VALIDATORS = [
     {
