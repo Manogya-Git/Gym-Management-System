@@ -22,3 +22,4 @@ dist/
 # IDE settings
 .vscode/
 *.sqlite3
+.env
