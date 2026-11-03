@@ -41,11 +41,6 @@ LOCAL_APPS = [
     'apps.trainers',
     'apps.fitness',
     'apps.classes',
-    'apps.equipment',
-    'apps.notifications',
-    'apps.feedback',
-    'apps.reports',
-    'apps.audit',
     'apps.core',
     'rest_framework_simplejwt',
 ]
