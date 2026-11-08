@@ -44,7 +44,12 @@ INSTALLED_APPS = [
     'rest_framework',
     'apps.accounts.apps.AccountsConfig',
     'apps.gyms.apps.GymsConfig',
-    "apps.members.apps.MembersConfig",]
+    "apps.members.apps.MembersConfig",
+    "apps.plans.apps.PlansConfig",
+    "apps.subscriptions.apps.SubscriptionsConfig",
+    "apps.payments.apps.PaymentsConfig",
+    
+    ]
 
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',

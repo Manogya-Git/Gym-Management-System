@@ -26,5 +26,13 @@ urlpatterns = [
     path(
     "api/v1/gyms/<int:gym_id>/members/",
     include("apps.members.urls")
+    ),
+    path(
+    "api/v1/gyms/<int:gym_id>/plans/",
+    include("apps.plans.urls")
 ),
+    path(
+        "api/v1/gyms/<int:gym_id>/subscriptions/",
+        include("apps.subscriptions.urls"),
+    ),
 ]
