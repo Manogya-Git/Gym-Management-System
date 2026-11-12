@@ -48,6 +48,7 @@ INSTALLED_APPS = [
     "apps.plans.apps.PlansConfig",
     "apps.subscriptions.apps.SubscriptionsConfig",
     "apps.payments.apps.PaymentsConfig",
+     "drf_spectacular",
     
     ]
 
@@ -146,6 +147,7 @@ REST_FRAMEWORK = {
     'DEFAULT_AUTHENTICATION_CLASSES': (
         'rest_framework_simplejwt.authentication.JWTAuthentication',
     ),
+    "DEFAULT_SCHEMA_CLASS": "drf_spectacular.openapi.AutoSchema",
 }
 
 SIMPLE_JWT = {
@@ -153,3 +155,21 @@ SIMPLE_JWT = {
 }
 
 AUTH_USER_MODEL = "accounts.User"
+
+SPECTACULAR_SETTINGS = {
+    "TITLE": "Gym Management API",
+    "DESCRIPTION": "API documentation for Gym Management System",
+    "VERSION": "1.0.0",
+
+    "APPEND_COMPONENTS": {
+        "securitySchemes": {
+            "BearerAuth": {
+                "type": "http",
+                "scheme": "bearer",
+                "bearerFormat": "JWT",
+            }
+        }
+    },
+
+    "SECURITY": [{"BearerAuth": []}],
+}
