@@ -6,7 +6,8 @@ from .models import User
 @admin.register(User)
 class CustomUserAdmin(UserAdmin):
     ordering = ("email",)
-    list_display = ("email", "first_name", "last_name", "is_staff", "is_active")
+    list_display = ("id", "email", "first_name", "last_name", "is_staff", "is_active")
+    list_display_links = ("id", "email")
 
     fieldsets = (
         (None, {"fields": ("email", "password")}),

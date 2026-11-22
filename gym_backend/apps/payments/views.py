@@ -1,31 +1,36 @@
 from django.utils import timezone
+from drf_spectacular.utils import extend_schema, OpenApiParameter
 
-from rest_framework.generics import ListCreateAPIView, get_object_or_404
+from rest_framework.generics import ListCreateAPIView, get_object_or_404, RetrieveUpdateAPIView
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.exceptions import ValidationError
 
 from apps.gyms.models import GymStaff
 
 from .models import Payment
-from .serializers import PaymentSerializer
+from .serializers import PaymentSerializer,PaymentStatusUpdateSerializer
 
 class PaymentListCreateAPIView(ListCreateAPIView):
     permission_classes = [IsAuthenticated]
     serializer_class = PaymentSerializer
+
     def get_gym_staff(self):
         return get_object_or_404(
             GymStaff,
-            gym_id = self.kwargs['gym_id'],
-            user = self.request.user,
-            is_active = True
+            gym_id=self.kwargs['gym_id'],
+            user=self.request.user,
+            is_active=True,
         )
 
     def get_queryset(self):
         gym_staff = self.get_gym_staff()
-        return Payment.objects.filter(
-                    gym = gym_staff.gym
-                )
-    def perform_create(self,serializer):
+        member_id = self.request.query_params.get("member")
+        gym_payment = Payment.objects.filter(gym=gym_staff.gym)
+        if member_id:
+            gym_payment = gym_payment.filter(member_id=member_id)
+        return gym_payment
+
+    def perform_create(self, serializer):
         validated_data = serializer.validated_data
         subscription = validated_data["subscription"]
         gym_staff = self.get_gym_staff()
@@ -46,4 +51,24 @@ class PaymentListCreateAPIView(ListCreateAPIView):
             status=Payment.Status.COMPLETED,
             paid_at=timezone.now()
         )
+class PaymentDetailAPIView(RetrieveUpdateAPIView):
+    permission_classes = [IsAuthenticated]
+    serializer_class = PaymentSerializer
 
+    def get_serializer_class(self):
+        if self.request.method == "PATCH":
+            return PaymentStatusUpdateSerializer
+        return PaymentSerializer
+        
+
+    def get_gym_staff(self):
+        return get_object_or_404(
+            GymStaff,
+            gym_id=self.kwargs['gym_id'],
+            user=self.request.user,
+            is_active=True,
+        )
+
+    def get_queryset(self):
+        gym_staff = self.get_gym_staff()
+        return Payment.objects.filter(gym=gym_staff.gym)

@@ -30,3 +30,23 @@ class PaymentSerializer(serializers.ModelSerializer):
 			"updated_at",
 		]
 
+class PaymentStatusUpdateSerializer(serializers.ModelSerializer):
+	class Meta:
+		model = Payment
+		fields = ['status']
+
+	def validate_status(self, value):
+		status = self.instance.status
+
+		if not (
+			(status == Payment.Status.PENDING and value == Payment.Status.COMPLETED)
+			or
+			(status == Payment.Status.COMPLETED and value == Payment.Status.REFUNDED)
+		):
+			raise serializers.ValidationError(
+				"This payment status transition is not allowed."
+			)
+
+		return value
+
+

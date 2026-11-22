@@ -8,4 +8,9 @@ urlpatterns = [
         views.PaymentListCreateAPIView.as_view(),
         name="gym-payments",
     ),
+    path(
+        "<int:pk>/", 
+        views.PaymentDetailAPIView.as_view(), 
+        name="gym-payment-detail",
+    ),
 ]
