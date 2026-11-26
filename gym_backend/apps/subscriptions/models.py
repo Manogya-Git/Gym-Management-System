@@ -24,5 +24,17 @@ class Subscription(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["gym","member"],
+                condition=models.Q(status="ACTIVE"),
+                name="unique_active_subscription_per_member_per_gym",
+                
+            ),
+        ]
+
     def __str__(self):
         return f"{self.member} - {self.plan.name}"
+
+    

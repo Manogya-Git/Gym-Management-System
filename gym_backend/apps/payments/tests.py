@@ -6,6 +6,7 @@ from apps.members.models import Member
 from apps.plans.models import Plan
 from apps.subscriptions.models import Subscription
 from apps.payments.models import Payment
+from django.db import IntegrityError, transaction
 
 class PaymentAPITests(APITestCase):
     def setUp(self):
@@ -495,6 +496,18 @@ class PaymentAPITests(APITestCase):
             self.payment.status,
             Payment.Status.FAILED
         )
+
+    def test_database_prevents_duplicate_completed_payment(self):
+        with self.assertRaises(IntegrityError):
+            with transaction.atomic():
+                Payment.objects.create(
+                    gym=self.gym,
+                    member=self.member,
+                    subscription=self.subscription,
+                    amount=self.plan.price,
+                    payment_method=Payment.PaymentMethod.CASH,
+                    status=Payment.Status.COMPLETED,
+                )
 
 
         

@@ -1,4 +1,5 @@
 from django.db import models
+from django.db.models import Q
 
 
 class Payment(models.Model):
@@ -31,3 +32,12 @@ class Payment(models.Model):
 
 	def __str__(self):
 		return f"Payment {self.pk} - {self.amount} ({self.status})"
+
+	class Meta:
+		constraints = [
+			models.UniqueConstraint(
+				fields=['subscription'],
+				condition=Q(status='completed'),
+				name='unique_completed_payment_per_subscription'
+			)
+		]

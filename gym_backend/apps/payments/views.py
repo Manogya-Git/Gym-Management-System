@@ -1,4 +1,5 @@
 from django.utils import timezone
+from apps.subscriptions.models import Subscription
 from drf_spectacular.utils import extend_schema, OpenApiParameter
 
 from rest_framework.generics import ListCreateAPIView, get_object_or_404, RetrieveUpdateAPIView
@@ -9,6 +10,7 @@ from apps.gyms.models import GymStaff
 
 from .models import Payment
 from .serializers import PaymentSerializer,PaymentStatusUpdateSerializer
+from django.db import transaction
 
 class PaymentListCreateAPIView(ListCreateAPIView):
     permission_classes = [IsAuthenticated]
@@ -31,26 +33,46 @@ class PaymentListCreateAPIView(ListCreateAPIView):
         return gym_payment
 
     def perform_create(self, serializer):
-        validated_data = serializer.validated_data
-        subscription = validated_data["subscription"]
-        gym_staff = self.get_gym_staff()
-        if subscription.gym != gym_staff.gym:
-            raise ValidationError("This subscription does not belong to your gym.")
-        if subscription.member != validated_data['member']:
-            raise ValidationError("This subscription does not belong to this member")
-        if Payment.objects.filter(subscription=subscription,status=Payment.Status.COMPLETED).exists():
-            raise ValidationError("This subscription has already been paid ")
-        if validated_data["payment_method"] != Payment.PaymentMethod.CASH:
-            raise ValidationError("Only cash payments are allowed.")
-        serializer.save(
-            gym=gym_staff.gym,
-            member=validated_data["member"],
-            subscription=subscription,
-            amount=subscription.plan.price,
-            payment_method=validated_data["payment_method"],
-            status=Payment.Status.COMPLETED,
-            paid_at=timezone.now()
-        )
+        with transaction.atomic():
+            validated_data = serializer.validated_data
+            gym_staff = self.get_gym_staff()
+
+            try:
+                subscription = Subscription.objects.select_for_update().get(
+                    id=validated_data["subscription"].id,
+                    gym=gym_staff.gym
+                )
+            except Subscription.DoesNotExist:
+                raise ValidationError(
+                    "This subscription does not belong to your gym."
+                )
+
+            if subscription.member != validated_data["member"]:
+                raise ValidationError(
+                    "This subscription does not belong to this member."
+                )
+
+            if Payment.objects.filter(
+                subscription=subscription,
+                status=Payment.Status.COMPLETED
+            ).exists():
+                raise ValidationError(
+                    "This subscription has already been paid."
+                )
+
+            if validated_data["payment_method"] != Payment.PaymentMethod.CASH:
+                raise ValidationError("Only cash payments are allowed.")
+
+            serializer.save(
+                gym=gym_staff.gym,
+                member=validated_data["member"],
+                subscription=subscription,
+                amount=subscription.plan.price,
+                payment_method=validated_data["payment_method"],
+                status=Payment.Status.COMPLETED,
+                paid_at=timezone.now()
+            )
+            
 class PaymentDetailAPIView(RetrieveUpdateAPIView):
     permission_classes = [IsAuthenticated]
     serializer_class = PaymentSerializer
