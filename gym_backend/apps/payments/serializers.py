@@ -4,6 +4,17 @@ from .models import Payment
 
 
 class PaymentSerializer(serializers.ModelSerializer):
+	def validate(self, attrs):
+		plan = attrs.get("plan")
+		subscription = attrs.get("subscription")
+
+		if plan and subscription and plan.gym != subscription.gym:
+			raise serializers.ValidationError(
+				"This plan does not belong to the subscription's gym."
+			)
+
+		return attrs
+	
 	class Meta:
 		model = Payment
 		fields = [
@@ -11,6 +22,8 @@ class PaymentSerializer(serializers.ModelSerializer):
 			"gym",
 			"member",
 			"subscription",
+			"invoice",
+			"plan",
 			"amount",
 			"payment_method",
 			"status",
@@ -22,6 +35,7 @@ class PaymentSerializer(serializers.ModelSerializer):
 		read_only_fields = [
 			"id",
 			"gym",
+			"invoice",
 			"amount",
 			"status",
 			"transaction_reference",
@@ -40,6 +54,8 @@ class PaymentStatusUpdateSerializer(serializers.ModelSerializer):
 
 		if not (
 			(status == Payment.Status.PENDING and value == Payment.Status.COMPLETED)
+			or
+			(status == Payment.Status.PENDING and value == Payment.Status.CANCELLED)
 			or
 			(status == Payment.Status.COMPLETED and value == Payment.Status.REFUNDED)
 		):

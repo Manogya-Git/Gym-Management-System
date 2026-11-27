@@ -1,14 +1,12 @@
-from datetime import timezone
-
 from django.shortcuts import get_object_or_404
+from django.utils import timezone
 from rest_framework import generics
+from rest_framework.exceptions import ValidationError
 from rest_framework.permissions import IsAuthenticated
 
 from apps.gyms.models import GymStaff
 from .models import Subscription
-from .serializers import SubscriptionSerializer
-from rest_framework.exceptions import ValidationError
-from django.utils import timezone
+from .serializers import SubscriptionSerializer, SubscriptionUpdateSerializer
 
 
 class SubscriptionListCreateAPIView(generics.ListCreateAPIView):
@@ -37,6 +35,11 @@ class SubscriptionDetailAPIView(generics.RetrieveUpdateAPIView):
     serializer_class = SubscriptionSerializer
     permission_classes = [IsAuthenticated]
     lookup_field = 'id'
+
+    def get_serializer_class(self):
+        if self.request.method in ("PATCH", "PUT"):
+            return SubscriptionUpdateSerializer
+        return SubscriptionSerializer
 
     def get_queryset(self):
         gym_staff = get_object_or_404(
@@ -107,6 +110,12 @@ class SubscriptionRestoreAPIView(generics.UpdateAPIView):
     def perform_update(self, serializer):
         if serializer.instance.end_date <= timezone.localdate():
             raise ValidationError("You cannot restore this subscription")
+        if Subscription.objects.filter(
+            gym=serializer.instance.gym,
+            member=serializer.instance.member,
+            status=Subscription.Status.ACTIVE,
+        ).exclude(pk=serializer.instance.pk).exists():
+            raise ValidationError("This member already has an active subscription.")
         serializer.instance.status = Subscription.Status.ACTIVE
         serializer.save()
 

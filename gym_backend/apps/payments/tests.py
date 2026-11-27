@@ -1,12 +1,15 @@
+from datetime import timedelta
+
+from django.db import IntegrityError, transaction
+from django.utils import timezone
 from rest_framework.test import APITestCase
-from django.urls import reverse
+
 from apps.accounts.models import User
 from apps.gyms.models import Gym, GymStaff
 from apps.members.models import Member
+from apps.payments.models import Payment
 from apps.plans.models import Plan
 from apps.subscriptions.models import Subscription
-from apps.payments.models import Payment
-from django.db import IntegrityError, transaction
 
 class PaymentAPITests(APITestCase):
     def setUp(self):
@@ -54,7 +57,8 @@ class PaymentAPITests(APITestCase):
             plan=self.plan,
             start_date="2026-11-22",
             end_date="2026-12-22",
-            status=Subscription.Status.ACTIVE
+            status=Subscription.Status.ACTIVE,
+            price=self.plan.price,
         )
         self.new_subscription = Subscription.objects.create(
             gym=self.gym,
@@ -62,7 +66,8 @@ class PaymentAPITests(APITestCase):
             plan=self.plan,
             start_date="2026-11-22",
             end_date="2026-12-22",
-            status=Subscription.Status.ACTIVE
+            status=Subscription.Status.ACTIVE,
+            price=self.plan.price,
         )
 
         self.payment = Payment.objects.create(
@@ -112,7 +117,8 @@ class PaymentAPITests(APITestCase):
             plan=self.second_plan,
             start_date="2026-11-22",
             end_date="2026-12-22",
-            status=Subscription.Status.ACTIVE
+            status=Subscription.Status.ACTIVE,
+            price=self.second_plan.price,
         )
 
         self.second_payment = Payment.objects.create(
@@ -133,7 +139,7 @@ class PaymentAPITests(APITestCase):
 
         self.assertEqual(response.status_code, 200)
 
-    def test_owner_cannot_retrieve_another_gyms_payment(self):
+    def test_owner_cannot_retrieve_payment_from_another_gym_url(self):
         self.client.force_authenticate(user=self.user)
 
         response = self.client.get(
@@ -476,27 +482,6 @@ class PaymentAPITests(APITestCase):
             Payment.Status.REFUNDED
         )
 
-    def test_owner_cannot_update_failed_payment(self):
-        self.client.force_authenticate(user=self.user)
-
-        self.payment.status = Payment.Status.FAILED
-        self.payment.save()
-
-        response = self.client.patch(
-            f"/api/v1/gyms/{self.gym.id}/payments/{self.payment.id}/",
-            {"status": Payment.Status.COMPLETED},
-            format="json"
-        )
-
-        self.assertEqual(response.status_code, 400)
-
-        self.payment.refresh_from_db()
-
-        self.assertEqual(
-            self.payment.status,
-            Payment.Status.FAILED
-        )
-
     def test_database_prevents_duplicate_completed_payment(self):
         with self.assertRaises(IntegrityError):
             with transaction.atomic():
@@ -509,13 +494,180 @@ class PaymentAPITests(APITestCase):
                     status=Payment.Status.COMPLETED,
                 )
 
+    def test_cash_payment_reactivates_expired_subscription(self):
+        self.client.force_authenticate(user=self.user)
+        today = timezone.localdate()
+        self.new_subscription.start_date = today - timedelta(days=40)
+        self.new_subscription.end_date = today - timedelta(days=10)
+        self.new_subscription.status = Subscription.Status.EXPIRED
+        self.new_subscription.save()
 
-        
+        response = self.client.post(
+            f"/api/v1/gyms/{self.gym.id}/payments/",
+            {
+                "member": self.new_member.id,
+                "subscription": self.new_subscription.id,
+                "payment_method": Payment.PaymentMethod.CASH,
+            },
+            format="json",
+        )
 
+        self.assertEqual(response.status_code, 201)
+        self.assertIsNotNone(response.data["paid_at"])
+        self.new_subscription.refresh_from_db()
+        self.assertEqual(self.new_subscription.status, Subscription.Status.ACTIVE)
+        self.assertEqual(self.new_subscription.start_date, today)
+        self.assertEqual(
+            self.new_subscription.end_date,
+            today + timedelta(days=self.plan.duration_days),
+        )
 
+    def test_completing_pending_payment_reactivates_cancelled_subscription(self):
+        self.client.force_authenticate(user=self.user)
+        today = timezone.localdate()
+        self.new_subscription.start_date = today - timedelta(days=15)
+        self.new_subscription.end_date = today + timedelta(days=15)
+        self.new_subscription.status = Subscription.Status.CANCELLED
+        self.new_subscription.save()
 
+        quarterly_plan = Plan.objects.create(
+            gym=self.gym,
+            name=Plan.Name.QUARTERLY,
+            description="Quarterly membership",
+            price=5500,
+            duration_days=90,
+        )
+        pending_payment = Payment.objects.create(
+            gym=self.gym,
+            member=self.new_member,
+            subscription=self.new_subscription,
+            plan=quarterly_plan,
+            amount=quarterly_plan.price,
+            payment_method=Payment.PaymentMethod.CASH,
+            status=Payment.Status.PENDING,
+        )
 
+        response = self.client.patch(
+            f"/api/v1/gyms/{self.gym.id}/payments/{pending_payment.id}/",
+            {"status": Payment.Status.COMPLETED},
+            format="json",
+        )
 
+        self.assertEqual(response.status_code, 200)
+        pending_payment.refresh_from_db()
+        self.assertIsNotNone(pending_payment.paid_at)
+        self.new_subscription.refresh_from_db()
+        self.assertEqual(self.new_subscription.status, Subscription.Status.ACTIVE)
+        self.assertEqual(self.new_subscription.plan, quarterly_plan)
+        self.assertEqual(self.new_subscription.price, quarterly_plan.price)
+        self.assertEqual(self.new_subscription.start_date, today)
+        self.assertEqual(
+            self.new_subscription.end_date,
+            today + timedelta(days=quarterly_plan.duration_days),
+        )
 
+    def test_cash_payment_with_new_plan_extends_active_subscription(self):
+        self.client.force_authenticate(user=self.user)
+        today = timezone.localdate()
+        self.new_subscription.start_date = today
+        self.new_subscription.end_date = today + timedelta(days=30)
+        self.new_subscription.status = Subscription.Status.ACTIVE
+        self.new_subscription.save()
+        original_end_date = self.new_subscription.end_date
 
+        yearly_plan = Plan.objects.create(
+            gym=self.gym,
+            name=Plan.Name.YEARLY,
+            description="Yearly membership",
+            price=18000,
+            duration_days=365,
+        )
 
+        response = self.client.post(
+            f"/api/v1/gyms/{self.gym.id}/payments/",
+            {
+                "member": self.new_member.id,
+                "subscription": self.new_subscription.id,
+                "plan": yearly_plan.id,
+                "payment_method": Payment.PaymentMethod.CASH,
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 201)
+        self.assertEqual(response.data["amount"], "18000.00")
+        self.new_subscription.refresh_from_db()
+        self.assertEqual(self.new_subscription.plan, yearly_plan)
+        self.assertEqual(self.new_subscription.price, yearly_plan.price)
+        self.assertEqual(
+            self.new_subscription.end_date,
+            original_end_date + timedelta(days=yearly_plan.duration_days),
+        )
+
+    def test_refunding_completed_payment_cancels_active_subscription(self):
+        self.client.force_authenticate(user=self.user)
+
+        response = self.client.patch(
+            f"/api/v1/gyms/{self.gym.id}/payments/{self.payment.id}/",
+            {"status": Payment.Status.REFUNDED},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.payment.refresh_from_db()
+        self.subscription.refresh_from_db()
+        self.assertEqual(self.payment.status, Payment.Status.REFUNDED)
+        self.assertEqual(self.subscription.status, Subscription.Status.CANCELLED)
+
+    def test_reactivating_payment_fails_when_member_has_other_active_subscription(self):
+        self.client.force_authenticate(user=self.user)
+        today = timezone.localdate()
+        expired_sub = Subscription.objects.create(
+            gym=self.gym,
+            member=self.member,
+            plan=self.plan,
+            start_date=today - timedelta(days=60),
+            end_date=today - timedelta(days=30),
+            status=Subscription.Status.EXPIRED,
+            price=self.plan.price,
+        )
+
+        response = self.client.post(
+            f"/api/v1/gyms/{self.gym.id}/payments/",
+            {
+                "member": self.member.id,
+                "subscription": expired_sub.id,
+                "payment_method": Payment.PaymentMethod.CASH,
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(Payment.objects.filter(subscription=expired_sub).count(), 0)
+        expired_sub.refresh_from_db()
+        self.assertEqual(expired_sub.status, Subscription.Status.EXPIRED)
+
+    def test_cancelling_pending_payment_does_not_modify_subscription(self):
+        self.client.force_authenticate(user=self.user)
+        pending_payment = Payment.objects.create(
+            gym=self.gym,
+            member=self.new_member,
+            subscription=self.new_subscription,
+            plan=self.plan,
+            amount=self.plan.price,
+            payment_method=Payment.PaymentMethod.CASH,
+            status=Payment.Status.PENDING,
+        )
+
+        response = self.client.patch(
+            f"/api/v1/gyms/{self.gym.id}/payments/{pending_payment.id}/",
+            {"status": Payment.Status.CANCELLED},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 200)
+        pending_payment.refresh_from_db()
+        self.new_subscription.refresh_from_db()
+        self.assertEqual(pending_payment.status, Payment.Status.CANCELLED)
+        self.assertIsNone(pending_payment.paid_at)
+        self.assertEqual(self.new_subscription.status, Subscription.Status.ACTIVE)

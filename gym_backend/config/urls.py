@@ -40,6 +40,7 @@ path(
     path('admin/', admin.site.urls),
     path("api/token/", TokenObtainPairView.as_view(), name="token_obtain_pair"),
     path("api/token/refresh/", TokenRefreshView.as_view(), name="token_refresh"),
+    path("api/v1/accounts/", include("apps.accounts.urls")),
     path("api/v1/gyms/", include("apps.gyms.urls")),
     path(
     "api/v1/gyms/<int:gym_id>/members/",
